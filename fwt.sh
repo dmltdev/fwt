@@ -11,19 +11,59 @@ _fwt_load_config() {
 }
 
 _fwt_usage() {
-  echo "usage: fwt [-r] [path]"
+  cat <<'EOF'
+fwt - jump to Git worktrees with fzf
+
+Usage:
+  fwt [options] [path]
+
+Arguments:
+  path                  Repo/path to inspect, or recursive scan root with -r.
+                        Defaults to current directory.
+
+Options:
+  -r, --recursive       Recursively discover Git repos under path and stream
+                        their worktrees into fzf.
+  -b, --basename        Display only each worktree directory name.
+                        Selection still cd's to the full real path.
+  -h, --help            Show this help.
+
+Config:
+  FWT_CONFIG            Config file path. Defaults to ~/.config/fwt/config.sh.
+  FWT_HOME_LABEL        Alias for paths under $HOME. Defaults to ~.
+  FWT_DISPLAY_WIDTH     Row width override.
+  FWT_FZF_CHROME_COLUMNS
+                        Columns reserved for fzf pointer/gutter when
+                        FWT_DISPLAY_WIDTH is not set. Defaults to 8.
+  FWT_POST_CD           Shell command to run after cd in selected worktree.
+  FWT_FZF_OPTS          Extra fzf options array.
+  fwt_after_cd()        Optional function hook called after cd with selected path.
+EOF
 }
 
 _fwt_emit_worktrees_for_repo() {
-  local repo sep alias_root alias_label width
+  local repo sep alias_root alias_label display_mode width chrome_columns terminal_width
   repo="$1"
   sep="$2"
   alias_root="${3:-}"
+  display_mode="${4:-path}"
   alias_label="${FWT_HOME_LABEL:-~}"
-  width="${FWT_DISPLAY_WIDTH:-${COLUMNS:-120}}"
+  if [[ -n "${FWT_DISPLAY_WIDTH:-}" ]]; then
+    width="$FWT_DISPLAY_WIDTH"
+  else
+    chrome_columns="${FWT_FZF_CHROME_COLUMNS:-8}"
+    terminal_width="${COLUMNS:-120}"
+    if [[ "$terminal_width" -lt 40 ]]; then
+      terminal_width=120
+    fi
+    width="$((terminal_width - chrome_columns))"
+    if [[ "$width" -lt 20 ]]; then
+      width=20
+    fi
+  fi
 
   command git -C "$repo" worktree list --porcelain 2>/dev/null |
-    awk -v sep="$sep" -v width="$width" -v alias_root="$alias_root" -v alias_label="$alias_label" '
+    awk -v sep="$sep" -v width="$width" -v alias_root="$alias_root" -v alias_label="$alias_label" -v display_mode="$display_mode" '
       function display_path_for(real_path) {
         if (alias_root != "" && real_path == alias_root) {
           return alias_label
@@ -33,6 +73,12 @@ _fwt_emit_worktrees_for_repo() {
           return alias_label substr(real_path, length(alias_root) + 1)
         }
 
+        return real_path
+      }
+
+      function basename_for(real_path) {
+        sub("/$", "", real_path)
+        sub("^.*/", "", real_path)
         return real_path
       }
 
@@ -69,11 +115,13 @@ _fwt_emit_worktrees_for_repo() {
         }
 
         branch_text = "[" label "]"
-        rendered_path = display_path_for(path)
-        max_path = width - length(branch_text) - 2
-        if (max_path > 0) {
-          rendered_path = truncate_path(rendered_path, max_path)
+        if (display_mode == "basename") {
+          rendered_path = basename_for(path)
+        } else {
+          rendered_path = display_path_for(path)
         }
+        max_path = width - length(branch_text) - 2
+        rendered_path = truncate_path(rendered_path, max_path)
 
         pad = width - length(rendered_path) - length(branch_text)
         if (pad < 2) {
@@ -119,10 +167,11 @@ _fwt_emit_worktrees_for_repo() {
 }
 
 _fwt_recursive_worktrees() {
-  local root repo sep home_root
+  local root repo sep home_root display_mode
   root="$1"
   sep="$2"
   home_root="${3:-}"
+  display_mode="${4:-path}"
 
   {
     command git -C "$root" rev-parse --show-toplevel 2>/dev/null || true
@@ -133,7 +182,7 @@ _fwt_recursive_worktrees() {
   } |
     awk 'NF && !seen[$0]++ { print; fflush() }' |
     while IFS= read -r repo; do
-      _fwt_emit_worktrees_for_repo "$repo" "$sep" "$home_root"
+      _fwt_emit_worktrees_for_repo "$repo" "$sep" "$home_root" "$display_mode"
     done |
     awk -v sep="$sep" '!seen[$0]++ { print; fflush() }'
 }
@@ -147,7 +196,7 @@ _fwt_select() {
   if typeset -p FWT_FZF_OPTS >/dev/null 2>&1; then
     fzf_opts+=("${FWT_FZF_OPTS[@]}")
   fi
-  fzf_opts+=(--delimiter="$sep" --with-nth=1 --nth=1,2)
+  fzf_opts+=(--delimiter="$sep" --with-nth=1)
 
   if IFS= read -r first; then
     selected="$(
@@ -179,8 +228,10 @@ _fwt_run_post_cd() {
 }
 
 fwt() {
-  local recursive root home_root selected sep fwt_status worktrees
+  local recursive basename root home_root display_mode selected sep fwt_status worktrees
   recursive=0
+  basename=0
+  display_mode=path
 
   _fwt_load_config
 
@@ -188,6 +239,10 @@ fwt() {
     case "$1" in
       -r|--recursive)
         recursive=1
+        shift
+        ;;
+      -b|--basename)
+        basename=1
         shift
         ;;
       -h|--help)
@@ -224,8 +279,12 @@ fwt() {
   home_root="$(cd -- "${HOME:-}" 2>/dev/null && pwd -P || true)"
   sep="$(printf '\034')"
 
+  if [[ "$basename" -eq 1 ]]; then
+    display_mode=basename
+  fi
+
   if [[ "$recursive" -eq 1 ]]; then
-    if selected="$(_fwt_recursive_worktrees "$root" "$sep" "$home_root" | _fwt_select "$sep")"; then
+    if selected="$(_fwt_recursive_worktrees "$root" "$sep" "$home_root" "$display_mode" | _fwt_select "$sep")"; then
       :
     else
       fwt_status="$?"
@@ -243,7 +302,7 @@ fwt() {
       return 1
     fi
 
-    worktrees="$(_fwt_emit_worktrees_for_repo "$root" "$sep" "$home_root")"
+    worktrees="$(_fwt_emit_worktrees_for_repo "$root" "$sep" "$home_root" "$display_mode")"
     if [[ -z "$worktrees" ]]; then
       echo "fwt: no worktrees found" >&2
       return 1

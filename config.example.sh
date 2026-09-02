@@ -11,9 +11,10 @@ FWT_FZF_OPTS=(
 # Display alias for paths underneath $HOME.
 FWT_HOME_LABEL='~'
 
-# Width used to right-align branch labels and truncate only the visible path.
-# Branch labels are not truncated by fwt.
-FWT_DISPLAY_WIDTH="${COLUMNS:-120}"
+# Optional row width override. Branch labels are not truncated by fwt.
+# If unset, fwt uses terminal width minus FWT_FZF_CHROME_COLUMNS.
+# FWT_DISPLAY_WIDTH=120
+FWT_FZF_CHROME_COLUMNS=8
 
 # Command to run after fwt changes into the selected worktree.
 # Runs in the current shell, inside the selected directory.
