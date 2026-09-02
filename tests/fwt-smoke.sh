@@ -228,6 +228,52 @@ fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
   [[ "${#visible}" -eq "$width" ]]
 }
 
+assert_zero_columns_uses_default_terminal_width() {
+  local shell="$1"
+  local root repo wt sep seen_path line visible branch
+
+  root="$(mktemp -d -t fwt-zero-columns.XXXXXX)"
+  repo="$root/repo main with a very long display prefix"
+  wt="$root/worktrees/feature worktree with a long display name"
+  branch="feature/zero-columns-fallback"
+  make_repo "$repo"
+  mkdir -p -- "$(dirname -- "$wt")"
+  git -C "$repo" worktree add "$wt" -b "$branch" >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "COLUMNS=0
+fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
+  line="$(awk -v suffix="$sep$wt" 'index($0, suffix) == length($0) - length(suffix) + 1 { print; exit }' "$seen_path")"
+  visible="${line%%$sep*}"
+
+  [[ "$visible" == *"[$branch]" ]]
+  [[ "${#visible}" -eq 116 ]]
+}
+
+assert_small_columns_keep_narrow_width() {
+  local shell="$1"
+  local root repo wt sep seen_path line visible branch
+
+  root="$(mktemp -d -t fwt-small-columns.XXXXXX)"
+  repo="$root/repo main with a very long display prefix"
+  wt="$root/worktrees/feature worktree with a long display name"
+  branch="feature/small"
+  make_repo "$repo"
+  mkdir -p -- "$(dirname -- "$wt")"
+  git -C "$repo" worktree add "$wt" -b "$branch" >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "COLUMNS=35
+fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
+  line="$(awk -v suffix="$sep$wt" 'index($0, suffix) == length($0) - length(suffix) + 1 { print; exit }' "$seen_path")"
+  visible="${line%%$sep*}"
+
+  [[ "$visible" == *"[$branch]" ]]
+  [[ "${#visible}" -eq 31 ]]
+}
+
 assert_real_fzf_filter_uses_visible_text() {
   local shell="$1"
   local root repo wt sep seen_path line branch visible_match hidden_match
@@ -357,6 +403,8 @@ for shell in bash zsh; do
   assert_basename_displayed_without_affecting_selection "$shell"
   assert_branch_only_width_keeps_full_branch "$shell"
   assert_real_fzf_filter_uses_visible_text "$shell"
+  assert_zero_columns_uses_default_terminal_width "$shell"
+  assert_small_columns_keep_narrow_width "$shell"
   assert_post_cd_runs_inside_selected_dir "$shell"
   assert_recursive_streams_to_fzf "$shell"
   assert_no_worktrees_message "$shell"

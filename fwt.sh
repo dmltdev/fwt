@@ -34,7 +34,7 @@ Config:
   FWT_DISPLAY_WIDTH     Row width override.
   FWT_FZF_CHROME_COLUMNS
                         Columns reserved for fzf pointer/gutter when
-                        FWT_DISPLAY_WIDTH is not set. Defaults to 8.
+                        FWT_DISPLAY_WIDTH is not set. Defaults to 4.
   FWT_POST_CD           Shell command to run after cd in selected worktree.
   FWT_FZF_OPTS          Extra fzf options array.
   fwt_after_cd()        Optional function hook called after cd with selected path.
@@ -51,9 +51,9 @@ _fwt_emit_worktrees_for_repo() {
   if [[ -n "${FWT_DISPLAY_WIDTH:-}" ]]; then
     width="$FWT_DISPLAY_WIDTH"
   else
-    chrome_columns="${FWT_FZF_CHROME_COLUMNS:-8}"
+    chrome_columns="${FWT_FZF_CHROME_COLUMNS:-4}"
     terminal_width="${COLUMNS:-120}"
-    if [[ "$terminal_width" -lt 40 ]]; then
+    if [[ "$terminal_width" -le 0 ]]; then
       terminal_width=120
     fi
     width="$((terminal_width - chrome_columns))"

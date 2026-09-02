@@ -89,7 +89,7 @@ FWT_FZF_OPTS=(
 )
 
 FWT_HOME_LABEL='~'
-FWT_FZF_CHROME_COLUMNS=8
+FWT_FZF_CHROME_COLUMNS=4
 # FWT_DISPLAY_WIDTH=120
 
 FWT_POST_CD='zed . && omp'
@@ -100,7 +100,7 @@ Config variables:
 - `FWT_CONFIG` — config file path. Defaults to `~/.config/fwt/config.sh`.
 - `FWT_HOME_LABEL` — alias for paths under `$HOME`. Defaults to `~`.
 - `FWT_DISPLAY_WIDTH` — explicit row width override.
-- `FWT_FZF_CHROME_COLUMNS` — columns reserved for fzf pointer/gutter when `FWT_DISPLAY_WIDTH` is unset. Defaults to `8`.
+- `FWT_FZF_CHROME_COLUMNS` — columns reserved for fzf pointer/gutter when `FWT_DISPLAY_WIDTH` is unset. Defaults to `4`.
 - `FWT_POST_CD` — shell command to run after `cd` in the selected worktree.
 - `FWT_FZF_OPTS` — extra fzf options array.
 - `fwt_after_cd()` — optional function hook called after `cd` with selected path.
