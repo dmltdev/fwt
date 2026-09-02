@@ -15,13 +15,48 @@ _fwt_usage() {
 }
 
 _fwt_emit_worktrees_for_repo() {
-  local repo sep width
+  local repo sep alias_root alias_label width
   repo="$1"
   sep="$2"
+  alias_root="${3:-}"
+  alias_label="${FWT_HOME_LABEL:-~}"
   width="${FWT_DISPLAY_WIDTH:-${COLUMNS:-120}}"
 
   command git -C "$repo" worktree list --porcelain 2>/dev/null |
-    awk -v sep="$sep" -v width="$width" '
+    awk -v sep="$sep" -v width="$width" -v alias_root="$alias_root" -v alias_label="$alias_label" '
+      function display_path_for(real_path) {
+        if (alias_root != "" && real_path == alias_root) {
+          return alias_label
+        }
+
+        if (alias_root != "" && substr(real_path, 1, length(alias_root) + 1) == alias_root "/") {
+          return alias_label substr(real_path, length(alias_root) + 1)
+        }
+
+        return real_path
+      }
+
+      function truncate_path(display_path, max_path) {
+        if (max_path <= 0) {
+          return ""
+        }
+
+        if (length(display_path) <= max_path) {
+          return display_path
+        }
+
+        if (substr(display_path, 1, length(alias_label) + 1) == alias_label "/" && max_path > length(alias_label) + 2) {
+          tail_len = max_path - length(alias_label) - 2
+          return alias_label "/…" substr(display_path, length(display_path) - tail_len + 1)
+        }
+
+        if (max_path == 1) {
+          return "…"
+        }
+
+        return "…" substr(display_path, length(display_path) - max_path + 2)
+      }
+
       function emit() {
         if (path == "") {
           return
@@ -34,12 +69,18 @@ _fwt_emit_worktrees_for_repo() {
         }
 
         branch_text = "[" label "]"
-        pad = width - length(path) - length(branch_text)
+        rendered_path = display_path_for(path)
+        max_path = width - length(branch_text) - 2
+        if (max_path > 0) {
+          rendered_path = truncate_path(rendered_path, max_path)
+        }
+
+        pad = width - length(rendered_path) - length(branch_text)
         if (pad < 2) {
           pad = 2
         }
 
-        printf "%s%*s%s%s%s\n", path, pad, "", branch_text, sep, path
+        printf "%s%*s%s%s%s\n", rendered_path, pad, "", branch_text, sep, path
         fflush()
         path = ""
         branch = ""
@@ -78,9 +119,10 @@ _fwt_emit_worktrees_for_repo() {
 }
 
 _fwt_recursive_worktrees() {
-  local root repo sep
+  local root repo sep home_root
   root="$1"
   sep="$2"
+  home_root="${3:-}"
 
   {
     command git -C "$root" rev-parse --show-toplevel 2>/dev/null || true
@@ -91,9 +133,9 @@ _fwt_recursive_worktrees() {
   } |
     awk 'NF && !seen[$0]++ { print; fflush() }' |
     while IFS= read -r repo; do
-      _fwt_emit_worktrees_for_repo "$repo" "$sep"
+      _fwt_emit_worktrees_for_repo "$repo" "$sep" "$home_root"
     done |
-    awk '!seen[$0]++ { print; fflush() }'
+    awk -v sep="$sep" '!seen[$0]++ { print; fflush() }'
 }
 
 _fwt_select() {
@@ -105,7 +147,7 @@ _fwt_select() {
   if typeset -p FWT_FZF_OPTS >/dev/null 2>&1; then
     fzf_opts+=("${FWT_FZF_OPTS[@]}")
   fi
-  fzf_opts+=(--delimiter="$sep" --with-nth=1)
+  fzf_opts+=(--delimiter="$sep" --with-nth=1 --nth=1,2)
 
   if IFS= read -r first; then
     selected="$(
@@ -137,7 +179,7 @@ _fwt_run_post_cd() {
 }
 
 fwt() {
-  local recursive root selected sep fwt_status worktrees
+  local recursive root home_root selected sep fwt_status worktrees
   recursive=0
 
   _fwt_load_config
@@ -179,10 +221,11 @@ fwt() {
   fi
 
   root="$(cd -- "$root" && pwd -P)" || return
+  home_root="$(cd -- "${HOME:-}" 2>/dev/null && pwd -P || true)"
   sep="$(printf '\034')"
 
   if [[ "$recursive" -eq 1 ]]; then
-    if selected="$(_fwt_recursive_worktrees "$root" "$sep" | _fwt_select "$sep")"; then
+    if selected="$(_fwt_recursive_worktrees "$root" "$sep" "$home_root" | _fwt_select "$sep")"; then
       :
     else
       fwt_status="$?"
@@ -200,7 +243,7 @@ fwt() {
       return 1
     fi
 
-    worktrees="$(_fwt_emit_worktrees_for_repo "$root" "$sep")"
+    worktrees="$(_fwt_emit_worktrees_for_repo "$root" "$sep" "$home_root")"
     if [[ -z "$worktrees" ]]; then
       echo "fwt: no worktrees found" >&2
       return 1

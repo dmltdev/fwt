@@ -4,6 +4,13 @@
 
 It is a shell function, not a standalone executable, because a child process cannot change the working directory of the current shell.
 
+## Requirements
+
+- `git`
+- `fzf`
+- `fd` for recursive mode
+- `awk`, `sed`, `dirname`, `cat`, `printf`
+
 ## Install
 
 Source `fwt.sh` from an interactive shell:
@@ -40,14 +47,16 @@ Recursive discovery streams into `fzf`: the picker opens after the first worktre
 
 ## Display
 
-Each fzf row shows the worktree path on the left and the branch label on the right:
+Each fzf row shows an aliased worktree path on the left and the branch label on the right:
 
 ```text
-/home/dmytro/code/app-auth                  [feature/auth]
-/home/dmytro/code/app                       [main]
+~/code/app-auth                  [feature/auth]
+~/code/app                       [main]
 ```
 
-The selected path is stored in a hidden field, so paths with spaces are preserved.
+Paths under `$HOME` display with `~`. The selected path is stored in a hidden field, so display aliases, truncation, and paths with spaces do not affect `cd`.
+
+Branch labels are not truncated by `fwt`. If a row would exceed the display width, `fwt` shortens only the visible path and keeps the full `[branch]` label.
 
 ## Config
 
@@ -66,6 +75,9 @@ FWT_FZF_OPTS=(
   --prompt='worktree> '
 )
 
+FWT_HOME_LABEL='~'
+FWT_DISPLAY_WIDTH="${COLUMNS:-120}"
+
 FWT_POST_CD='zed . && omp'
 ```
 
@@ -81,9 +93,3 @@ fwt_after_cd() {
 
 `fwt_after_cd` runs before `FWT_POST_CD` and receives the selected path.
 
-## Requirements
-
-- `git`
-- `fzf`
-- `fd` for recursive mode
-- `awk`, `sed`, `dirname`, `cat`, `printf`

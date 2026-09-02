@@ -32,6 +32,7 @@ write_fzf_stub() {
   cat > "$bin_dir/fzf" <<EOF
 #!/usr/bin/env bash
 cat > $(quote "$seen")
+printf '%s\n' "\$@" > $(quote "$seen.args")
 if [[ -n "\${FZF_SELECT_SUFFIX:-}" ]]; then
   line="\$(awk -v suffix="\$FZF_SELECT_SUFFIX" 'index(\$0, suffix) == length(\$0) - length(suffix) + 1 { print; exit }' $(quote "$seen"))"
   if [[ -n "\$line" ]]; then
@@ -124,6 +125,72 @@ assert_branch_label_displayed() {
   seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
   grep -F '[feature/label]' $seen_path >/dev/null
 }
+
+assert_home_alias_displayed_without_affecting_selection() {
+  local shell="$1"
+  local root repo wt sep seen_path line visible
+
+  root="$(mktemp -d -t fwt-root-alias.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "fwt -r $(quote "$root") >/dev/null" "$sep$wt" >/dev/null
+  seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
+  line="$(awk -v suffix="$sep$wt" 'index($0, suffix) == length($0) - length(suffix) + 1 { print; exit }' "$seen_path")"
+  visible="${line%%$sep*}"
+
+  [[ "$visible" == *'~/feature worktree'* ]]
+  [[ "$line" == *"$sep$wt" ]]
+}
+
+assert_long_branch_visible_truncates_path_first() {
+  local shell="$1"
+  local root repo wt sep seen_path line visible branch
+
+  root="$(mktemp -d -t fwt-long-branch.XXXXXX)"
+  repo="$root/repo main with a very long display prefix"
+  wt="$root/worktrees/feature worktree with a long display name"
+  branch="feature/this-branch-name-remains-visible"
+  make_repo "$repo"
+  mkdir -p -- "$(dirname -- "$wt")"
+  git -C "$repo" worktree add "$wt" -b "$branch" >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "COLUMNS=80
+fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
+  line="$(awk -v suffix="$sep$wt" 'index($0, suffix) == length($0) - length(suffix) + 1 { print; exit }' "$seen_path")"
+  visible="${line%%$sep*}"
+
+  [[ "$visible" == *"[$branch]" ]]
+  [[ "${#visible}" -le 80 ]]
+}
+
+assert_hidden_path_remains_searchable() {
+  local shell="$1"
+  local root repo wt sep seen_path args_path
+
+  root="$(mktemp -d -t fwt-search-fields.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/worktrees/omitted path segment"
+  make_repo "$repo"
+  mkdir -p -- "$(dirname -- "$wt")"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "COLUMNS=35
+fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
+  args_path="$seen_path.args"
+
+  grep -Fx -- '--with-nth=1' "$args_path" >/dev/null
+  grep -Fx -- '--nth=1,2' "$args_path" >/dev/null
+  grep -F 'omitted path segment' "$seen_path" >/dev/null
+}
+
 
 assert_post_cd_runs_inside_selected_dir() {
   local shell="$1"
@@ -222,6 +289,9 @@ for shell in bash zsh; do
   assert_nonrecursive_path_with_spaces "$shell"
   assert_recursive_finds_linked_worktree_marker_file "$shell"
   assert_branch_label_displayed "$shell"
+  assert_home_alias_displayed_without_affecting_selection "$shell"
+  assert_long_branch_visible_truncates_path_first "$shell"
+  assert_hidden_path_remains_searchable "$shell"
   assert_post_cd_runs_inside_selected_dir "$shell"
   assert_recursive_streams_to_fzf "$shell"
   assert_no_worktrees_message "$shell"
