@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo "failed: line $LINENO: $BASH_COMMAND" >&2' ERR
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 FWT_SH="$ROOT_DIR/fwt.sh"
@@ -61,6 +62,7 @@ run_case() {
 
   script="$cwd/case-$shell-$RANDOM.$shell"
   cat > "$script" <<EOF
+cd -- $(quote "$cwd")
 source $(quote "$FWT_SH")
 $body
 EOF

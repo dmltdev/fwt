@@ -137,7 +137,7 @@ _fwt_run_post_cd() {
 }
 
 fwt() {
-  local recursive root selected sep worktrees
+  local recursive root selected sep fwt_status worktrees
   recursive=0
 
   _fwt_load_config
@@ -182,15 +182,18 @@ fwt() {
   sep="$(printf '\034')"
 
   if [[ "$recursive" -eq 1 ]]; then
-    selected="$(_fwt_recursive_worktrees "$root" "$sep" | _fwt_select "$sep")"
-    case "$?" in
-      0) ;;
-      3)
-        echo "fwt: no worktrees found" >&2
-        return 1
-        ;;
-      *) return ;;
-    esac
+    if selected="$(_fwt_recursive_worktrees "$root" "$sep" | _fwt_select "$sep")"; then
+      :
+    else
+      fwt_status="$?"
+      case "$fwt_status" in
+        3)
+          echo "fwt: no worktrees found" >&2
+          return 1
+          ;;
+        *) return "$fwt_status" ;;
+      esac
+    fi
   else
     if ! command git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
       echo "fwt: not inside a git repo: $root" >&2
