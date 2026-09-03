@@ -74,7 +74,7 @@ Paths under `$HOME` display with `~`. The selected path is stored in a hidden fi
 
 Branch labels are not truncated by `fwt`. If a row would exceed the display width, `fwt` shortens only the visible path and keeps the full `[branch]` label. If the branch alone is wider than the picker row, the terminal/fzf viewport can still clip it.
 
-The picker header shows the effective post-`cd` action: `after cd: <command>` when `FWT_POST_CD` or `--after-cd` is set, otherwise `after cd: set FWT_POST_CD in ~/.config/fwt/config.sh`.
+The picker header shows what will run after selection: `after cd: fwt_after_cd()` for the hook, `after cd: <command>` for `FWT_POST_CD` or `--after-cd`, and `after cd: fwt_after_cd(); <command>` when both are set. If neither is set, it points at the effective config file.
 
 ## Config
 
@@ -108,9 +108,9 @@ Config variables:
 - `FWT_FZF_CHROME_COLUMNS` — columns reserved for fzf pointer/gutter when `FWT_DISPLAY_WIDTH` is unset. Defaults to `4`.
 - `FWT_POST_CD` — shell command shown in the fzf header and run after `cd` in the selected worktree.
 - `FWT_FZF_OPTS` — extra fzf options array.
-- `fwt_after_cd()` — optional function hook called after `cd` with selected path.
+- `fwt_after_cd()` — optional function hook shown in the fzf header and called after `cd` with selected path.
 
-`FWT_POST_CD` runs after `fwt` changes into the selected worktree. Override it once with `--after-cd <cmd>` or disable it once with `--after-cd=''`. It is evaluated as local shell code, so only run commands you trust.
+`FWT_POST_CD` runs after `fwt` changes into the selected worktree. Override it once with `--after-cd <cmd>` or disable it once with `--after-cd=''`. It is evaluated as local shell code, so only run commands you trust. If unset, the picker hint points at the effective config path from `FWT_CONFIG`, `XDG_CONFIG_HOME`, or `~/.config/fwt/config.sh`.
 
 For more control, define a function hook:
 

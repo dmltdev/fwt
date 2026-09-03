@@ -99,11 +99,12 @@ assert_help_lists_after_cd_override() {
 
 assert_fzf_header_hints_config_without_post_cd() {
   local shell="$1"
-  local root repo wt sep args_path
+  local root repo wt sep args_path expected
 
   root="$(mktemp -d -t fwt-header-config.XXXXXX)"
   repo="$root/repo main"
   wt="$root/feature worktree"
+  expected="$root/.config/fwt/config.sh"
   make_repo "$repo"
   git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
   sep="$(printf '\034')"
@@ -111,7 +112,46 @@ assert_fzf_header_hints_config_without_post_cd() {
   run_case "$shell" "$root" "fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
   args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
 
-  awk 'BEGIN { found=0 } $0 == "--header=after cd: set FWT_POST_CD in ~/.config/fwt/config.sh" { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+  awk -v expected="--header=after cd: set FWT_POST_CD in $expected" 'BEGIN { found=0 } $0 == expected { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+}
+
+assert_fzf_header_uses_xdg_config_home() {
+  local shell="$1"
+  local root repo wt xdg sep args_path expected
+
+  root="$(mktemp -d -t fwt-header-xdg.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  xdg="$root/xdg config"
+  expected="$xdg/fwt/config.sh"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "XDG_CONFIG_HOME=$(quote "$xdg")
+fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
+
+  awk -v expected="--header=after cd: set FWT_POST_CD in $expected" 'BEGIN { found=0 } $0 == expected { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+}
+
+assert_fzf_header_uses_fwt_config() {
+  local shell="$1"
+  local root repo wt config sep args_path
+
+  root="$(mktemp -d -t fwt-header-fwt-config.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  config="$root/custom/fwt-config.sh"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "FWT_CONFIG=$(quote "$config")
+fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
+
+  awk -v expected="--header=after cd: set FWT_POST_CD in $config" 'BEGIN { found=0 } $0 == expected { found=1 } END { exit found ? 0 : 1 }' "$args_path"
 }
 
 assert_fzf_header_shows_effective_post_cd() {
@@ -134,6 +174,55 @@ EOF
   args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
 
   awk 'BEGIN { found=0 } $0 == "--header=after cd: printf header >/dev/null" { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+}
+
+assert_fzf_header_shows_hook_only() {
+  local shell="$1"
+  local root repo wt home sep args_path
+
+  root="$(mktemp -d -t fwt-header-hook.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  home="$root/home"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  mkdir -p -- "$home/.config/fwt"
+  cat > "$home/.config/fwt/config.sh" <<'EOF'
+fwt_after_cd() {
+  :
+}
+EOF
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "fwt $(quote "$repo") >/dev/null" "$sep$wt" "$home" >/dev/null
+  args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
+
+  awk 'BEGIN { found=0 } $0 == "--header=after cd: fwt_after_cd()" { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+}
+
+assert_fzf_header_shows_hook_before_command() {
+  local shell="$1"
+  local root repo wt home sep args_path
+
+  root="$(mktemp -d -t fwt-header-hook-command.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  home="$root/home"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  mkdir -p -- "$home/.config/fwt"
+  cat > "$home/.config/fwt/config.sh" <<'EOF'
+fwt_after_cd() {
+  :
+}
+FWT_POST_CD='printf header >/dev/null'
+EOF
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "fwt $(quote "$repo") >/dev/null" "$sep$wt" "$home" >/dev/null
+  args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
+
+  awk 'BEGIN { found=0 } $0 == "--header=after cd: fwt_after_cd(); printf header >/dev/null" { found=1 } END { exit found ? 0 : 1 }' "$args_path"
 }
 
 assert_nonrecursive_path_with_spaces() {
@@ -493,7 +582,11 @@ for shell in bash zsh; do
   assert_help_lists_all_flags "$shell"
   assert_help_lists_after_cd_override "$shell"
   assert_fzf_header_hints_config_without_post_cd "$shell"
+  assert_fzf_header_uses_xdg_config_home "$shell"
+  assert_fzf_header_uses_fwt_config "$shell"
   assert_fzf_header_shows_effective_post_cd "$shell"
+  assert_fzf_header_shows_hook_only "$shell"
+  assert_fzf_header_shows_hook_before_command "$shell"
   assert_nonrecursive_path_with_spaces "$shell"
   assert_recursive_finds_linked_worktree_marker_file "$shell"
   assert_branch_label_displayed "$shell"

@@ -22,7 +22,7 @@ FWT_FZF_CHROME_COLUMNS=4
 # FWT_POST_CD='zed . && omp'
 FWT_POST_CD=''
 
-# Optional function hook. Runs before FWT_POST_CD and receives the selected path.
+# Optional function hook. Shown in fzf and runs before FWT_POST_CD.
 # fwt_after_cd() {
 #   printf 'entered %s\n' "$1"
 # }

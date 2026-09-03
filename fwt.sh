@@ -1,10 +1,14 @@
 # Source this file from an interactive shell. fwt must be a function so it can
 # change the current shell's working directory.
 
+_fwt_config_path() {
+  printf '%s\n' "${FWT_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/fwt/config.sh}"
+}
+
 _fwt_load_config() {
   local config_file
 
-  config_file="${FWT_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/fwt/config.sh}"
+  config_file="$1"
   if [[ -r "$config_file" ]]; then
     source "$config_file"
   fi
@@ -217,13 +221,23 @@ _fwt_select() {
 }
 
 _fwt_post_cd_hint() {
-  local post_cd_cmd
+  local post_cd_cmd config_file has_hook
   post_cd_cmd="$1"
+  config_file="$2"
+  has_hook=0
 
-  if [[ -n "$post_cd_cmd" ]]; then
+  if typeset -f fwt_after_cd >/dev/null 2>&1; then
+    has_hook=1
+  fi
+
+  if [[ "$has_hook" -eq 1 && -n "$post_cd_cmd" ]]; then
+    printf 'after cd: fwt_after_cd(); %s\n' "$post_cd_cmd"
+  elif [[ "$has_hook" -eq 1 ]]; then
+    printf 'after cd: fwt_after_cd()\n'
+  elif [[ -n "$post_cd_cmd" ]]; then
     printf 'after cd: %s\n' "$post_cd_cmd"
   else
-    printf 'after cd: set FWT_POST_CD in ~/.config/fwt/config.sh\n'
+    printf 'after cd: set FWT_POST_CD in %s\n' "$config_file"
   fi
 }
 
@@ -242,12 +256,13 @@ _fwt_run_post_cd() {
 }
 
 fwt() {
-  local recursive basename root home_root display_mode selected sep fwt_status worktrees post_cd_cmd post_cd_hint
+  local recursive basename root home_root display_mode selected sep fwt_status worktrees config_file post_cd_cmd post_cd_hint
   recursive=0
   basename=0
   display_mode=path
   post_cd_cmd=""
-  _fwt_load_config
+  config_file="$(_fwt_config_path)"
+  _fwt_load_config "$config_file"
   post_cd_cmd="${FWT_POST_CD:-}"
 
   while [[ $# -gt 0 ]]; do
@@ -311,7 +326,7 @@ fwt() {
   if [[ "$basename" -eq 1 ]]; then
     display_mode=basename
   fi
-  post_cd_hint="$(_fwt_post_cd_hint "$post_cd_cmd")"
+  post_cd_hint="$(_fwt_post_cd_hint "$post_cd_cmd" "$config_file")"
 
   if [[ "$recursive" -eq 1 ]]; then
     if selected="$(_fwt_recursive_worktrees "$root" "$sep" "$home_root" "$display_mode" | _fwt_select "$sep" "$post_cd_hint")"; then
