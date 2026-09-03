@@ -43,6 +43,7 @@ Options:
 
 - `-r`, `--recursive` — recursively discover Git repos under `path` and stream their worktrees into `fzf`.
 - `-b`, `--basename` — display only each worktree directory name. Selection still `cd`s to the full real path.
+- `--after-cd <cmd>` — override `FWT_POST_CD` for one run. Use `--after-cd=''` to disable it for one run.
 - `-h`, `--help` — print usage, options, and config variables.
 
 Examples:
@@ -54,6 +55,8 @@ fwt -r
 fwt -r /path/to/search-root
 fwt --basename
 fwt -r --basename ~/work
+fwt --after-cd 'zed . && omp'
+fwt --after-cd='' ~/work/app
 ```
 
 Recursive discovery streams into `fzf`: the picker opens after the first worktree is found while the rest of the scan continues.
@@ -70,6 +73,8 @@ Each fzf row shows an aliased worktree path on the left and the branch label on 
 Paths under `$HOME` display with `~`. The selected path is stored in a hidden field, so display aliases, truncation, and paths with spaces do not affect `cd`.
 
 Branch labels are not truncated by `fwt`. If a row would exceed the display width, `fwt` shortens only the visible path and keeps the full `[branch]` label. If the branch alone is wider than the picker row, the terminal/fzf viewport can still clip it.
+
+The picker header shows the effective post-`cd` action: `after cd: <command>` when `FWT_POST_CD` or `--after-cd` is set, otherwise `after cd: set FWT_POST_CD in ~/.config/fwt/config.sh`.
 
 ## Config
 
@@ -101,11 +106,11 @@ Config variables:
 - `FWT_HOME_LABEL` — alias for paths under `$HOME`. Defaults to `~`.
 - `FWT_DISPLAY_WIDTH` — explicit row width override.
 - `FWT_FZF_CHROME_COLUMNS` — columns reserved for fzf pointer/gutter when `FWT_DISPLAY_WIDTH` is unset. Defaults to `4`.
-- `FWT_POST_CD` — shell command to run after `cd` in the selected worktree.
+- `FWT_POST_CD` — shell command shown in the fzf header and run after `cd` in the selected worktree.
 - `FWT_FZF_OPTS` — extra fzf options array.
 - `fwt_after_cd()` — optional function hook called after `cd` with selected path.
 
-`FWT_POST_CD` runs after `fwt` changes into the selected worktree. It is evaluated as local shell code, so only put commands you trust in your own config file.
+`FWT_POST_CD` runs after `fwt` changes into the selected worktree. Override it once with `--after-cd <cmd>` or disable it once with `--after-cd=''`. It is evaluated as local shell code, so only run commands you trust.
 
 For more control, define a function hook:
 

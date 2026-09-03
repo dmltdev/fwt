@@ -89,6 +89,53 @@ assert_help_lists_all_flags() {
   [[ "$out" == *'FWT_FZF_CHROME_COLUMNS'* ]]
 }
 
+assert_help_lists_after_cd_override() {
+  local shell="$1"
+  local out
+
+  out="$(run_case "$shell" "$(mktemp -d -t fwt-help-after-cd.XXXXXX)" 'fwt --help')"
+  [[ "$out" == *'--after-cd <cmd>'* ]]
+}
+
+assert_fzf_header_hints_config_without_post_cd() {
+  local shell="$1"
+  local root repo wt sep args_path
+
+  root="$(mktemp -d -t fwt-header-config.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "fwt $(quote "$repo") >/dev/null" "$sep$wt" >/dev/null
+  args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
+
+  awk 'BEGIN { found=0 } $0 == "--header=after cd: set FWT_POST_CD in ~/.config/fwt/config.sh" { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+}
+
+assert_fzf_header_shows_effective_post_cd() {
+  local shell="$1"
+  local root repo wt home sep args_path
+
+  root="$(mktemp -d -t fwt-header-command.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  home="$root/home"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  mkdir -p -- "$home/.config/fwt"
+  cat > "$home/.config/fwt/config.sh" <<'EOF'
+FWT_POST_CD='printf header >/dev/null'
+EOF
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "fwt $(quote "$repo") >/dev/null" "$sep$wt" "$home" >/dev/null
+  args_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input.args)"
+
+  awk 'BEGIN { found=0 } $0 == "--header=after cd: printf header >/dev/null" { found=1 } END { exit found ? 0 : 1 }' "$args_path"
+}
+
 assert_nonrecursive_path_with_spaces() {
   local shell="$1"
   local root repo wt out sep
@@ -325,6 +372,51 @@ EOF
   [[ "$(cat "$out_file")" == "$wt" ]]
 }
 
+assert_after_cd_override_replaces_config_command() {
+  local shell="$1"
+  local root repo wt home config_out override_out sep override_cmd
+
+  root="$(mktemp -d -t fwt-after-cd-override.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  home="$root/home"
+  config_out="$root/config-ran"
+  override_out="$root/override-ran"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  mkdir -p -- "$home/.config/fwt"
+  cat > "$home/.config/fwt/config.sh" <<EOF
+FWT_POST_CD='printf config > $(quote "$config_out")'
+EOF
+  sep="$(printf '\034')"
+  override_cmd="printf override > $(quote "$override_out")"
+
+  run_case "$shell" "$root" "fwt --after-cd $(quote "$override_cmd") $(quote "$repo")" "$sep$wt" "$home" >/dev/null
+  [[ ! -e "$config_out" ]]
+  [[ "$(cat "$override_out")" == "override" ]]
+}
+
+assert_after_cd_empty_disables_config_command() {
+  local shell="$1"
+  local root repo wt home config_out sep
+
+  root="$(mktemp -d -t fwt-after-cd-disable.XXXXXX)"
+  repo="$root/repo main"
+  wt="$root/feature worktree"
+  home="$root/home"
+  config_out="$root/config-ran"
+  make_repo "$repo"
+  git -C "$repo" worktree add "$wt" -b feature >/dev/null 2>&1
+  mkdir -p -- "$home/.config/fwt"
+  cat > "$home/.config/fwt/config.sh" <<EOF
+FWT_POST_CD='printf config > $(quote "$config_out")'
+EOF
+  sep="$(printf '\034')"
+
+  run_case "$shell" "$root" "fwt --after-cd= $(quote "$repo")" "$sep$wt" "$home" >/dev/null
+  [[ ! -e "$config_out" ]]
+}
+
 assert_recursive_streams_to_fzf() {
   local shell="$1"
   local root bin scan_root repo wt script started
@@ -399,6 +491,9 @@ assert_no_worktrees_message() {
 assert_shell_syntax
 for shell in bash zsh; do
   assert_help_lists_all_flags "$shell"
+  assert_help_lists_after_cd_override "$shell"
+  assert_fzf_header_hints_config_without_post_cd "$shell"
+  assert_fzf_header_shows_effective_post_cd "$shell"
   assert_nonrecursive_path_with_spaces "$shell"
   assert_recursive_finds_linked_worktree_marker_file "$shell"
   assert_branch_label_displayed "$shell"
@@ -412,5 +507,7 @@ for shell in bash zsh; do
   assert_post_cd_runs_inside_selected_dir "$shell"
   assert_recursive_streams_to_fzf "$shell"
   assert_no_worktrees_message "$shell"
+  assert_after_cd_override_replaces_config_command "$shell"
+  assert_after_cd_empty_disables_config_command "$shell"
   printf 'ok %s\n' "$shell"
 done

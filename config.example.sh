@@ -16,8 +16,8 @@ FWT_HOME_LABEL='~'
 # FWT_DISPLAY_WIDTH=120
 FWT_FZF_CHROME_COLUMNS=4
 
-# Command to run after fwt changes into the selected worktree.
-# Runs in the current shell, inside the selected directory.
+# Command shown in fzf and run after fwt changes into the selected worktree.
+# Override once with: fwt --after-cd 'zed . && omp'
 # Example:
 # FWT_POST_CD='zed . && omp'
 FWT_POST_CD=''

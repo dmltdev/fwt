@@ -26,6 +26,7 @@ Options:
                         their worktrees into fzf.
   -b, --basename        Display only each worktree directory name.
                         Selection still cd's to the full real path.
+  --after-cd <cmd>      Override FWT_POST_CD for this invocation.
   -h, --help            Show this help.
 
 Config:
@@ -35,7 +36,7 @@ Config:
   FWT_FZF_CHROME_COLUMNS
                         Columns reserved for fzf pointer/gutter when
                         FWT_DISPLAY_WIDTH is not set. Defaults to 4.
-  FWT_POST_CD           Shell command to run after cd in selected worktree.
+  FWT_POST_CD           Shell command shown in fzf and run after cd.
   FWT_FZF_OPTS          Extra fzf options array.
   fwt_after_cd()        Optional function hook called after cd with selected path.
 EOF
@@ -188,11 +189,12 @@ _fwt_recursive_worktrees() {
 }
 
 _fwt_select() {
-  local sep first selected
+  local sep post_cd_hint first selected
   local -a fzf_opts
 
   sep="$1"
-  fzf_opts=(--prompt='worktree> ' --height=40% --reverse)
+  post_cd_hint="$2"
+  fzf_opts=(--prompt='worktree> ' --height=40% --reverse --header="$post_cd_hint")
   if typeset -p FWT_FZF_OPTS >/dev/null 2>&1; then
     fzf_opts+=("${FWT_FZF_OPTS[@]}")
   fi
@@ -214,26 +216,39 @@ _fwt_select() {
   printf '%s\n' "${selected##*$sep}"
 }
 
+_fwt_post_cd_hint() {
+  local post_cd_cmd
+  post_cd_cmd="$1"
+
+  if [[ -n "$post_cd_cmd" ]]; then
+    printf 'after cd: %s\n' "$post_cd_cmd"
+  else
+    printf 'after cd: set FWT_POST_CD in ~/.config/fwt/config.sh\n'
+  fi
+}
+
 _fwt_run_post_cd() {
-  local dir
+  local dir post_cd_cmd
   dir="$1"
+  post_cd_cmd="$2"
 
   if typeset -f fwt_after_cd >/dev/null 2>&1; then
     fwt_after_cd "$dir"
   fi
 
-  if [[ -n "${FWT_POST_CD:-}" ]]; then
-    eval "$FWT_POST_CD"
+  if [[ -n "$post_cd_cmd" ]]; then
+    eval "$post_cd_cmd"
   fi
 }
 
 fwt() {
-  local recursive basename root home_root display_mode selected sep fwt_status worktrees
+  local recursive basename root home_root display_mode selected sep fwt_status worktrees post_cd_cmd post_cd_hint
   recursive=0
   basename=0
   display_mode=path
-
+  post_cd_cmd=""
   _fwt_load_config
+  post_cd_cmd="${FWT_POST_CD:-}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -243,6 +258,20 @@ fwt() {
         ;;
       -b|--basename)
         basename=1
+        shift
+        ;;
+      --after-cd)
+        shift
+        if [[ $# -eq 0 ]]; then
+          echo "fwt: --after-cd requires a command" >&2
+          _fwt_usage >&2
+          return 2
+        fi
+        post_cd_cmd="$1"
+        shift
+        ;;
+      --after-cd=*)
+        post_cd_cmd="${1#--after-cd=}"
         shift
         ;;
       -h|--help)
@@ -282,9 +311,10 @@ fwt() {
   if [[ "$basename" -eq 1 ]]; then
     display_mode=basename
   fi
+  post_cd_hint="$(_fwt_post_cd_hint "$post_cd_cmd")"
 
   if [[ "$recursive" -eq 1 ]]; then
-    if selected="$(_fwt_recursive_worktrees "$root" "$sep" "$home_root" "$display_mode" | _fwt_select "$sep")"; then
+    if selected="$(_fwt_recursive_worktrees "$root" "$sep" "$home_root" "$display_mode" | _fwt_select "$sep" "$post_cd_hint")"; then
       :
     else
       fwt_status="$?"
@@ -308,10 +338,10 @@ fwt() {
       return 1
     fi
 
-    selected="$(printf '%s\n' "$worktrees" | _fwt_select "$sep")" || return
+    selected="$(printf '%s\n' "$worktrees" | _fwt_select "$sep" "$post_cd_hint")" || return
   fi
 
   [[ -n "$selected" ]] || return 1
   cd -- "$selected" || return
-  _fwt_run_post_cd "$selected"
+  _fwt_run_post_cd "$selected" "$post_cd_cmd"
 }
