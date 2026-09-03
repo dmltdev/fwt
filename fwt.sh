@@ -33,6 +33,8 @@ Options:
   --after-cd <cmd>      Override FWT_POST_CD for this invocation.
   -h, --help            Show this help.
 
+Short options may be combined, e.g. -rb.
+
 Config:
   FWT_CONFIG            Config file path. Defaults to ~/.config/fwt/config.sh.
   FWT_HOME_LABEL        Alias for paths under $HOME. Defaults to ~.
@@ -256,7 +258,7 @@ _fwt_run_post_cd() {
 }
 
 fwt() {
-  local recursive basename root home_root display_mode selected sep fwt_status worktrees config_file post_cd_cmd post_cd_hint
+  local recursive basename root home_root display_mode selected sep fwt_status worktrees config_file post_cd_cmd post_cd_hint short_opts short_opt
   recursive=0
   basename=0
   display_mode=path
@@ -288,6 +290,31 @@ fwt() {
       --after-cd=*)
         post_cd_cmd="${1#--after-cd=}"
         shift
+        ;;
+      -[!-]?*)
+        short_opts="${1#-}"
+        shift
+        while [[ -n "$short_opts" ]]; do
+          short_opt="${short_opts%"${short_opts#?}"}"
+          short_opts="${short_opts#?}"
+          case "$short_opt" in
+            r)
+              recursive=1
+              ;;
+            b)
+              basename=1
+              ;;
+            h)
+              _fwt_usage
+              return 0
+              ;;
+            *)
+              echo "fwt: unknown option: -$short_opt" >&2
+              _fwt_usage >&2
+              return 2
+              ;;
+          esac
+        done
         ;;
       -h|--help)
         _fwt_usage

@@ -46,6 +46,8 @@ Options:
 - `--after-cd <cmd>` — override `FWT_POST_CD` for one run. Use `--after-cd=''` to disable it for one run.
 - `-h`, `--help` — print usage, options, and config variables.
 
+Short options may be combined, e.g. `fwt -rb` is the same as `fwt -r -b`.
+
 Examples:
 
 ```bash
@@ -55,6 +57,7 @@ fwt -r
 fwt -r /path/to/search-root
 fwt --basename
 fwt -r --basename ~/work
+fwt -rb ~/work
 fwt --after-cd 'zed . && omp'
 fwt --after-cd='' ~/work/app
 ```

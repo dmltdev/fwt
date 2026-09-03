@@ -97,6 +97,45 @@ assert_help_lists_after_cd_override() {
   [[ "$out" == *'--after-cd <cmd>'* ]]
 }
 
+assert_clustered_short_options_enable_recursive_basename() {
+  local shell="$1"
+  local flags root outside scan_root linked sep seen_path line visible
+
+  for flags in -rb -br; do
+    root="$(mktemp -d -t fwt-clustered.XXXXXX)"
+    outside="$root/outside repo"
+    scan_root="$root/scan root"
+    linked="$scan_root/linked worktree"
+    make_repo "$outside"
+    mkdir -p -- "$scan_root"
+    git -C "$outside" worktree add "$linked" -b linked >/dev/null 2>&1
+    sep="$(printf '\034')"
+
+    run_case "$shell" "$root" "fwt $flags $(quote "$scan_root") >/dev/null" "$sep$linked" >/dev/null
+    seen_path="$(printf '%s\n' "$root"/bin-$shell-*/fzf-input)"
+    line="$(awk -v suffix="$sep$linked" 'index($0, suffix) == length($0) - length(suffix) + 1 { print; exit }' "$seen_path")"
+    visible="${line%%$sep*}"
+
+    [[ "$visible" == linked\ worktree* ]]
+    [[ "$visible" != *"$root"* ]]
+    [[ "$line" == *"$sep$linked" ]]
+  done
+}
+
+assert_clustered_short_options_reject_unknown_flag() {
+  local shell="$1"
+  local root err status
+
+  root="$(mktemp -d -t fwt-clustered-error.XXXXXX)"
+  set +e
+  err="$(run_case "$shell" "$root" 'fwt -rx .' '' 2>&1 >/dev/null)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 2 ]]
+  [[ "$err" == *'fwt: unknown option: -x'* ]]
+}
+
 assert_fzf_header_hints_config_without_post_cd() {
   local shell="$1"
   local root repo wt sep args_path expected
@@ -581,6 +620,8 @@ assert_shell_syntax
 for shell in bash zsh; do
   assert_help_lists_all_flags "$shell"
   assert_help_lists_after_cd_override "$shell"
+  assert_clustered_short_options_enable_recursive_basename "$shell"
+  assert_clustered_short_options_reject_unknown_flag "$shell"
   assert_fzf_header_hints_config_without_post_cd "$shell"
   assert_fzf_header_uses_xdg_config_home "$shell"
   assert_fzf_header_uses_fwt_config "$shell"
